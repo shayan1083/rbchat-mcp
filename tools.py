@@ -42,4 +42,11 @@ app = FastAPI(lifespan=mcp_app.router.lifespan_context)
 
 app.mount("/mcp-server", mcp_app, "mcp")
 
+@app.get("/health-check")
+async def health_check():
+    return {"status": "ok", "message": "MCP server is running"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("tools:app", port=int(MCP_PORT), reload=True)
 # uvicorn tools:app --reload --port 7999
