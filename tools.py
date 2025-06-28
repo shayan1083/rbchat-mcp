@@ -4,6 +4,7 @@ from user_repository import UserRepository
 import logging
 from llm_logger import log_error, log_sql_output
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 settings = Settings()
 logger = logging.getLogger("llm_logger")
@@ -42,9 +43,17 @@ app = FastAPI(lifespan=mcp_app.router.lifespan_context)
 
 app.mount("/mcp-server", mcp_app, "mcp")
 
-@app.get("/health-check")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.ALLOWED_ORIGINS],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/api/healthcheck")
 async def health_check():
-    return {"status": "ok", "message": "MCP server is running"}
+    return {"status": 200, "message": "MCP server is running"}
 
 if __name__ == "__main__":
     import uvicorn
