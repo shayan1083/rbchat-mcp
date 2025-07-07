@@ -1,6 +1,8 @@
 import psycopg2
 from settings import Settings
 from llm_logger import log_info, log_error
+import uuid
+from file_modify import ensure_modified_files_table
 
 settings = Settings()
 
@@ -41,3 +43,24 @@ class UserRepository:
         except Exception as e:
             log_error(f"[UserRepository] SQL execution failed: {e}")
             return []
+
+
+    def save_binary_file_from_mcp(self, filename: str, file_type: str, content: bytes):
+        ensure_modified_files_table()
+        log_info('[UserRepository] Writing files into database')
+        session_id = str(uuid.uuid4())
+        with psycopg2.connect(**self.connection_params) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO modified_files (session_id, filename, file_type, content, upload_time)
+                    VALUES (%s, %s, %s, %s, NOW())
+                    RETURNING id;
+                """, (session_id, filename, file_type, psycopg2.Binary(content)))
+
+                file_id = cur.fetchone()[0]
+        log_info('[UserRepository] File uploaded')
+        return {
+            "message": "File saved successfully",
+            "filename": filename,
+            "url": f"http://{settings.FASTAPI_HOST}:{settings.FASTAPI_PORT}/download/{file_id}"
+        }

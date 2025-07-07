@@ -2,9 +2,13 @@ from mcp.server.fastmcp import FastMCP
 from settings import Settings
 from user_repository import UserRepository
 import logging
-from llm_logger import log_error, log_sql_output
+from llm_logger import log_error, log_sql_output, log_info
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from langchain_google_community import GoogleSearchAPIWrapper
+import base64
+import tempfile
+import pandas as pd
 
 settings = Settings()
 logger = logging.getLogger("llm_logger")
@@ -35,6 +39,125 @@ def run_sql_query(query: str) -> str:
     except Exception as e:
         log_error(f"Error running SQL query: {e}")
         return f"Query failed: {e}"
+
+@mcp.tool()
+def search_google(query: str) -> str:
+    """
+    Searches the internet using Google Search API and returns the results.
+
+    Args: 
+        query: The search query string to be executed.
+    
+    Returns:
+        A string containing the search results.
+    """
+    search = GoogleSearchAPIWrapper(
+        google_api_key=settings.GOOGLE_API_KEY,
+        google_cse_id=settings.CSE_ID,
+    )
+    res = search.run(query)
+    return res
+
+@mcp.tool()
+def processed_file(file: dict) -> dict:
+    """
+    Save the processed file for the user into a database.
+
+    Args:
+        file: A dictionary with keys:
+              - 'filename': name of the file (e.g. 'cleaned_data.csv')
+              - 'content': either raw text or base64-encoded string
+              - 'file_type': MIME type, e.g. 'text/csv'
+
+    Returns:
+        Dictionary with file info or error message.
+    """
+
+    try:
+        content = file['content']
+        file_type = file.get("file_type", "")
+
+        if file_type.startswith("text/"):
+            content_bytes = content.encode("utf-8")
+        else:
+            missing_padding = len(content) % 4
+            if missing_padding:
+                content += '=' * (4 - missing_padding)
+            content_bytes = base64.b64decode(content)
+
+
+        with UserRepository() as user_repo:
+            result = user_repo.save_binary_file_from_mcp(
+                filename=file["filename"],
+                file_type=file["file_type"],
+                content=content_bytes,
+            )
+        return result
+    except Exception as e:
+        log_error(f"Error saving file: {e}")
+        return {"error": f"Save failed: {e}"}
+
+# @mcp.tool()
+# def processed_file_with_script(file: dict, script: str) -> dict:
+#     """
+#     Save the processed file for the user into a database by running a Python script on it.
+
+#     Args:
+#         file: A dictionary with keys:
+#               - 'filename': name of the file (e.g. 'cleaned_data.csv')
+#               - 'content': a string or base64-encoded string
+#               - 'file_type': MIME type, e.g. 'text/csv'
+#         script: Python code (as a string) that edits the input file according to the users requests
+
+#     Returns:
+#         Dictionary with file info or error message.
+#     """
+#     try:
+#         # print("DEBUG - content length:", len(file['content']))
+#         # print("DEBUG - content (truncated):", file['content'][:100])
+#         log_info(f'[processed_file_with_script] content {file['content']}')
+#         # Decode file content
+#         content = file['content']
+#         if not isinstance(content, bytes):
+#             missing_padding = len(content) % 4
+#             if missing_padding:
+#                 content += '=' * (4 - missing_padding)
+#             content = base64.b64decode(content)
+
+#         # Create temporary input and output files
+#         with tempfile.NamedTemporaryFile(delete=False, mode='wb') as tmp_in:
+#             tmp_in.write(content)
+#             input_path = tmp_in.name
+
+#         with tempfile.NamedTemporaryFile(delete=False, mode='wb') as tmp_out:
+#             output_path = tmp_out.name
+
+#         # Run the script in a controlled environment
+#         exec_globals = {
+#             "__builtins__": __builtins__,
+#             "pd": pd,
+#             "input_file": input_path,
+#             "output_file": output_path,
+#         }
+#         exec(script, exec_globals)
+
+#         # Read modified content
+#         with open(output_path, 'rb') as f:
+#             modified_content = f.read()
+
+#         # Save to database
+#         with UserRepository() as user_repo:
+#             result = user_repo.save_binary_file_from_mcp(
+#                 filename=file["filename"],
+#                 file_type=file["file_type"],
+#                 content=modified_content,
+#             )
+
+#         return result
+
+#     except Exception as e:
+#         log_error(f"[processed_file_with_script] Error saving file: {e}")
+#         return {"error": f"Save failed: {e}"}
 
 
 mcp_app = mcp.streamable_http_app()

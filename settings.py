@@ -18,3 +18,9 @@ class Settings(BaseSettings):
 
     ENABLE_LOGGING: bool= os.getenv('ENABLE_LOGGING')
     LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
+    
+    GOOGLE_API_KEY: str = os.getenv('GOOGLE_API_KEY')
+    CSE_ID: str = os.getenv('CSE_ID')
+
+    FASTAPI_HOST: str = os.getenv('FASTAPI_URL', "127.0.0.1")
+    FASTAPI_PORT: int = int(os.getenv('FASTAPI_PORT', 8003))
