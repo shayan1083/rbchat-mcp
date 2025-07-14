@@ -7,13 +7,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_google_community import GoogleSearchAPIWrapper
 import base64
-import tempfile
-import pandas as pd
+import os
+import csv
+from datetime import datetime
+import io
 
 settings = Settings()
 logger = logging.getLogger("llm_logger")
 
-MCP_PORT =  settings.MCP_SERVER_PORT
 mcp = FastMCP("RBChat")
 
 
@@ -97,67 +98,40 @@ def processed_file(file: dict) -> dict:
         log_error(f"Error saving file: {e}")
         return {"error": f"Save failed: {e}"}
 
-# @mcp.tool()
-# def processed_file_with_script(file: dict, script: str) -> dict:
-#     """
-#     Save the processed file for the user into a database by running a Python script on it.
+@mcp.tool()
+def export_user_query_to_file(query: str):
+    """
+        Export the database query results into a file
 
-#     Args:
-#         file: A dictionary with keys:
-#               - 'filename': name of the file (e.g. 'cleaned_data.csv')
-#               - 'content': a string or base64-encoded string
-#               - 'file_type': MIME type, e.g. 'text/csv'
-#         script: Python code (as a string) that edits the input file according to the users requests
+        Args:
+            query: llm generated database query
 
-#     Returns:
-#         Dictionary with file info or error message.
-#     """
-#     try:
-#         # print("DEBUG - content length:", len(file['content']))
-#         # print("DEBUG - content (truncated):", file['content'][:100])
-#         log_info(f'[processed_file_with_script] content {file['content']}')
-#         # Decode file content
-#         content = file['content']
-#         if not isinstance(content, bytes):
-#             missing_padding = len(content) % 4
-#             if missing_padding:
-#                 content += '=' * (4 - missing_padding)
-#             content = base64.b64decode(content)
+        Returns:
+            Dictionary with file info or error message.
+    """
+    log_info(f"Exporting query: {query}")
+    with UserRepository() as user_repo:
+            result = user_repo.run_sql_query(query)
 
-#         # Create temporary input and output files
-#         with tempfile.NamedTemporaryFile(delete=False, mode='wb') as tmp_in:
-#             tmp_in.write(content)
-#             input_path = tmp_in.name
+    if not result:
+        return "No data found for given query"
+    
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=result[0].keys())
+    writer.writeheader()
+    writer.writerows(result)
 
-#         with tempfile.NamedTemporaryFile(delete=False, mode='wb') as tmp_out:
-#             output_path = tmp_out.name
+    csv_content = output.getvalue().encode("utf-8")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"query_result_{timestamp}.csv"
+    with UserRepository() as user_repo:
+            result = user_repo.save_binary_file_from_mcp(
+                filename=filename,
+                file_type='text/csv',
+                content=csv_content,
+            )
+    return result
 
-#         # Run the script in a controlled environment
-#         exec_globals = {
-#             "__builtins__": __builtins__,
-#             "pd": pd,
-#             "input_file": input_path,
-#             "output_file": output_path,
-#         }
-#         exec(script, exec_globals)
-
-#         # Read modified content
-#         with open(output_path, 'rb') as f:
-#             modified_content = f.read()
-
-#         # Save to database
-#         with UserRepository() as user_repo:
-#             result = user_repo.save_binary_file_from_mcp(
-#                 filename=file["filename"],
-#                 file_type=file["file_type"],
-#                 content=modified_content,
-#             )
-
-#         return result
-
-#     except Exception as e:
-#         log_error(f"[processed_file_with_script] Error saving file: {e}")
-#         return {"error": f"Save failed: {e}"}
 
 
 mcp_app = mcp.streamable_http_app()
@@ -178,7 +152,5 @@ app.add_middleware(
 async def health_check():
     return {"status": 200, "message": "MCP server is running"}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("tools:app", port=int(MCP_PORT), reload=True)
+
 # uvicorn tools:app --reload --port 7999

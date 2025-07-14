@@ -64,3 +64,5 @@ class UserRepository:
             "filename": filename,
             "url": f"http://{settings.FASTAPI_HOST}:{settings.FASTAPI_PORT}/download/{file_id}"
         }
+    
+
