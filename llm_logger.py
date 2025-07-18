@@ -1,46 +1,43 @@
 import logging
+import psycopg2
 from settings import Settings
 from postgres_logging import PostgresHandler
 
 settings = Settings()
 
-logger = logging.getLogger("llm_logger")
-logger.handlers.clear()
+class LLMLogger:
+    def __init__(self):
+        self.settings = Settings()
 
-log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
-logger.setLevel(log_level)
-logger.propagate = False
+        self.logger = logging.getLogger("llm_logger")
+        log_level = getattr(logging, self.settings.LOG_LEVEL.upper(), logging.INFO)
+        self.logger.setLevel(log_level)
 
-connection_params = {
-            "host": settings.DB_HOST,
-            "port": settings.DB_PORT,
-            "user": settings.DB_USER,
-            "password": settings.DB_PASSWORD,
-            "dbname": settings.DB_NAME,
+        self.connection_params = {
+            "host": self.settings.DB_HOST,
+            "port": self.settings.DB_PORT,
+            "user": self.settings.DB_USER,
+            "password": self.settings.DB_PASSWORD,
+            "dbname": self.settings.DB_NAME,
         }
 
+        if self.settings.ENABLE_LOGGING and not self.logger.handlers:
+            pg_handler = PostgresHandler(self.connection_params)
+            pg_handler.setLevel(log_level)
+            self.logger.addHandler(pg_handler)
 
-def log_info(message: str):
-    logger.info(f"{message}", stacklevel=2)
 
-def log_error(message: str):
-    logger.error(f"{message}", exc_info=True, stacklevel=2)
+    def info(self, message: str):
+        self.logger.info(message, stacklevel=2)
 
-def log_sql_output(sql_query: str):
-    logger.info(f"[SQL Query] {sql_query}", stacklevel=2)
+    def debug(self, message: str):
+        self.logger.debug(message, stacklevel=2)
 
-# Main usage logging
-def log_llm_usage(model_name: str, prompt: str, response: str, token_usage: dict, tool_used: str = None):
-    logger.info(f"[LLM] Model: {model_name}", stacklevel=2)
-    logger.info(f"[LLM] Prompt: {prompt}", stacklevel=2)
-    logger.info(f"[LLM] Response: {response}", stacklevel=2)
-    logger.info(
-        f"[Usage] Tokens - Input: {token_usage.get('input_tokens')}, "
-        f"Output: {token_usage.get('output_tokens')}, "
-        f"Total: {token_usage.get('total_tokens')}"
-    )
+    def error(self, message: str):
+        self.logger.error(message, stacklevel=2)
 
-if settings.ENABLE_LOGGING:
-    pg_handler = PostgresHandler(connection_params)
-    pg_handler.setLevel(log_level)
-    logger.addHandler(pg_handler)
+    def log_sql_output(self, sql_query: str):
+        self.logger.info(f"(MCP) [SQL Query] {sql_query}", stacklevel=2)
+
+
+    

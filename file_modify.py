@@ -1,8 +1,11 @@
 from settings import Settings
 import psycopg2
+from llm_logger import LLMLogger
 
 
 settings = Settings()
+
+logger = LLMLogger()
 
 connection_params = {
     "host": settings.DB_HOST,
@@ -24,8 +27,14 @@ def ensure_modified_files_table():
         upload_time TIMESTAMPTZ DEFAULT NOW()
     );
     """
-    with psycopg2.connect(**connection_params) as conn:
-        with conn.cursor() as cur:
-            cur.execute(create_table_sql)
+    try:
+        with psycopg2.connect(**connection_params) as conn:
+            with conn.cursor() as cur:
+                cur.execute(create_table_sql)
+        logger.info('(MCP) Ensured modified_files exists')
+    except Exception as e:
+        logger.error(f'(MCP) Error ensuring modified_files table: {e}')
+
+    
 
 

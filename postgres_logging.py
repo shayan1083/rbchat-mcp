@@ -52,7 +52,6 @@ class PostgresHandler(logging.Handler):
                         record.lineno
                     ))
         except Exception as e:
-            # fallback to console in case DB logging fails
             print(f"[PostgresHandler Error] {e}")
         finally:
             if conn:

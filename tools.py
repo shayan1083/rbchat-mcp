@@ -1,22 +1,24 @@
 from mcp.server.fastmcp import FastMCP
 from settings import Settings
 from user_repository import UserRepository
-import logging
-from llm_logger import log_error, log_sql_output, log_info
+from llm_logger import LLMLogger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_google_community import GoogleSearchAPIWrapper
 import base64
-import os
 import csv
 from datetime import datetime
 import io
+from file_modify import ensure_modified_files_table
+from starlette.requests import Request
 
 settings = Settings()
-logger = logging.getLogger("llm_logger")
+logger = LLMLogger()
 
 mcp = FastMCP("RBChat")
 
+def get_db_name() -> str:
+    return mcp.get_context().request_context.request.headers.get("db_name", settings.DB_NAME)
 
 @mcp.tool()
 def run_sql_query(query: str) -> str:
@@ -29,17 +31,19 @@ def run_sql_query(query: str) -> str:
     Returns:
         A formatted string or JSON of the result rows.
     """
-    log_sql_output(query)
+    logger.log_sql_output(query)
     if not query.strip().lower().startswith("select"):
         return "Only SELECT queries are allowed."
 
     try:
-        with UserRepository() as user_repo:
+        with UserRepository(get_db_name()) as user_repo:
             result = user_repo.run_sql_query(query)
         return str(result)
     except Exception as e:
-        log_error(f"Error running SQL query: {e}")
+        logger.error(f"(MCP) Error running SQL query: {e}")
         return f"Query failed: {e}"
+
+
 
 @mcp.tool()
 def search_google(query: str) -> str:
@@ -87,7 +91,7 @@ def processed_file(file: dict) -> dict:
             content_bytes = base64.b64decode(content)
 
 
-        with UserRepository() as user_repo:
+        with UserRepository(get_db_name()) as user_repo:
             result = user_repo.save_binary_file_from_mcp(
                 filename=file["filename"],
                 file_type=file["file_type"],
@@ -95,7 +99,7 @@ def processed_file(file: dict) -> dict:
             )
         return result
     except Exception as e:
-        log_error(f"Error saving file: {e}")
+        logger.error(f"(MCP) Error saving file: {e}")
         return {"error": f"Save failed: {e}"}
 
 @mcp.tool()
@@ -109,8 +113,8 @@ def export_user_query_to_file(query: str):
         Returns:
             Dictionary with file info or error message.
     """
-    log_info(f"Exporting query: {query}")
-    with UserRepository() as user_repo:
+    logger.info(f"(MCP) Exporting query: {query}")
+    with UserRepository(get_db_name()) as user_repo:
             result = user_repo.run_sql_query(query)
 
     if not result:
@@ -124,7 +128,7 @@ def export_user_query_to_file(query: str):
     csv_content = output.getvalue().encode("utf-8")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"query_result_{timestamp}.csv"
-    with UserRepository() as user_repo:
+    with UserRepository(get_db_name()) as user_repo:
             result = user_repo.save_binary_file_from_mcp(
                 filename=filename,
                 file_type='text/csv',
@@ -137,6 +141,7 @@ def export_user_query_to_file(query: str):
 mcp_app = mcp.streamable_http_app()
 app = FastAPI(lifespan=mcp_app.router.lifespan_context)
 
+ensure_modified_files_table()
 
 app.mount("/mcp-server", mcp_app, "mcp")
 
@@ -151,6 +156,5 @@ app.add_middleware(
 @app.get("/api/healthcheck")
 async def health_check():
     return {"status": 200, "message": "MCP server is running"}
-
 
 # uvicorn tools:app --reload --port 7999
