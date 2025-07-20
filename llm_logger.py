@@ -1,5 +1,4 @@
 import logging
-import psycopg2
 from settings import Settings
 from postgres_logging import PostgresHandler
 

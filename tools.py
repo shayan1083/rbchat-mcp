@@ -9,7 +9,6 @@ import base64
 import csv
 from datetime import datetime
 import io
-from file_modify import ensure_modified_files_table
 from starlette.requests import Request
 
 settings = Settings()
@@ -91,7 +90,7 @@ def processed_file(file: dict) -> dict:
             content_bytes = base64.b64decode(content)
 
 
-        with UserRepository(get_db_name()) as user_repo:
+        with UserRepository() as user_repo:
             result = user_repo.save_binary_file_from_mcp(
                 filename=file["filename"],
                 file_type=file["file_type"],
@@ -128,7 +127,7 @@ def export_user_query_to_file(query: str):
     csv_content = output.getvalue().encode("utf-8")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"query_result_{timestamp}.csv"
-    with UserRepository(get_db_name()) as user_repo:
+    with UserRepository() as user_repo:
             result = user_repo.save_binary_file_from_mcp(
                 filename=filename,
                 file_type='text/csv',
@@ -136,12 +135,9 @@ def export_user_query_to_file(query: str):
             )
     return result
 
-
-
 mcp_app = mcp.streamable_http_app()
 app = FastAPI(lifespan=mcp_app.router.lifespan_context)
 
-ensure_modified_files_table()
 
 app.mount("/mcp-server", mcp_app, "mcp")
 
@@ -156,5 +152,9 @@ app.add_middleware(
 @app.get("/api/healthcheck")
 async def health_check():
     return {"status": 200, "message": "MCP server is running"}
+
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run("tools:app", port=7999, reload=True)
 
 # uvicorn tools:app --reload --port 7999
