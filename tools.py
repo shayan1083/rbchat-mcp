@@ -9,7 +9,6 @@ import base64
 import csv
 from datetime import datetime
 import io
-from starlette.requests import Request
 
 settings = Settings()
 logger = LLMLogger()
