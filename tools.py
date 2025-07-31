@@ -5,6 +5,7 @@ from llm_logger import LLMLogger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_google_community import GoogleSearchAPIWrapper
+from langchain_community.tools.tavily_search import TavilySearchResults
 import base64
 import csv
 from datetime import datetime
@@ -44,21 +45,32 @@ def run_sql_query(query: str) -> str:
 
 
 @mcp.tool()
-def search_google(query: str) -> str:
+def search_internet(query: str) -> str:
     """
-    Searches the internet using Google Search API and returns the results.
+    Searches the internet using Tavily Search api and returns the results.
 
     Args: 
-        query: The search query string to be executed.
+        query: The search query string to be executed. It should be exactly what the user asked.
     
     Returns:
         A string containing the search results.
     """
-    search = GoogleSearchAPIWrapper(
-        google_api_key=settings.GOOGLE_API_KEY,
-        google_cse_id=settings.CSE_ID,
-    )
-    res = search.run(query)
+    logger.info("(MCP) Entering search_internet tool")
+    if settings.GOOGLE_API_KEY and settings.CSE_ID:
+        logger.info(f"(MCP) Google Search: {query}")
+        search = GoogleSearchAPIWrapper(
+            google_api_key=settings.GOOGLE_API_KEY,
+            google_cse_id=settings.CSE_ID,
+        )
+        res = search.run(query)
+    elif settings.TAVILY_API_KEY:
+        logger.info(f"(MCP) Tavily Search: {query}")
+        search = TavilySearchResults(max_results=3, tavily_api_key=settings.TAVILY_API_KEY)
+        res = search.invoke(query)
+    else:
+        logger.error(f"(MCP) No internet search api key available")
+        return "Error"
+    logger.info(f"(MCP) Search Internet Output: {res}")
     return res
 
 @mcp.tool()
