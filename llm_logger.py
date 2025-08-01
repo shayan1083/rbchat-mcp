@@ -9,6 +9,7 @@ class LLMLogger:
         self.settings = Settings()
 
         self.logger = logging.getLogger("llm_logger")
+        self.logger.propagate = False
         log_level = getattr(logging, self.settings.LOG_LEVEL.upper(), logging.INFO)
         self.logger.setLevel(log_level)
 
