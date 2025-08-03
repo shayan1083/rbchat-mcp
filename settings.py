@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 load_dotenv()
 
 class Settings(BaseSettings):
+    OPENAI_API_KEY: str
     DB_HOST: str = 'localhost'
     DB_PORT: int = 5432
     DB_USER: str = 'postgres'

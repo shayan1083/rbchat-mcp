@@ -11,6 +11,9 @@ import base64
 import csv
 from datetime import datetime
 import io
+from openai import OpenAI
+
+client = OpenAI()
 
 settings = Settings()
 logger = LLMLogger()
@@ -56,25 +59,26 @@ def search_internet(query: str) -> str:
     Returns:
         A string containing the search results.
     """
-    logger.info("(MCP) Entering search_internet tool")
-    if settings.TAVILY_API_KEY:
-        logger.info(f"(MCP) Tavily Search: {query}")
-        search = TavilySearch(max_results=3)
-        # search = TavilySearchResults(max_results=3, tavily_api_key=settings.TAVILY_API_KEY)
-        res = search.invoke(query)
-    elif settings.GOOGLE_API_KEY and settings.CSE_ID:
-        logger.info(f"(MCP) Google Search: {query}")
-        search = GoogleSearchAPIWrapper(
-            google_api_key=settings.GOOGLE_API_KEY,
-            google_cse_id=settings.CSE_ID,
-        )
-        res = search.run(query)
-    
-    else:
-        logger.error(f"(MCP) No internet search api key available")
-        return "Error"
-    logger.info(f"(MCP) Search Internet Output: {res}")
-    return res
+    try:
+        searchTool="OpenAI Api"
+        if settings.OPENAI_API_KEY:
+            response = client.responses.create(
+                model="gpt-4.1",
+                tools=[{"type": "web_search_preview"}],
+                input=query
+            )
+            res = response.output_text
+        elif settings.TAVILY_API_KEY:
+            searchTool="Tavily"
+            search = TavilySearch(max_results=5, time_range='week')
+            res = search.invoke(query)
+        else:
+            logger.error(f"(MCP) No internet search api key available")
+            return "Error"
+        logger.info(f"(MCP) {searchTool} searched {query}; Output: {res}")
+        return res
+    except Exception as e:
+        logger.error(f"(MCP) Error using internet_search: {e}")
 
 @mcp.tool()
 def processed_file(file: dict) -> dict:
