@@ -151,6 +151,7 @@ def export_user_query_to_file(query: str):
                 file_type='text/csv',
                 content=csv_content,
             )
+    logger.info(f'Export Result: {result}')
     return result
 
 mcp_app = mcp.streamable_http_app()

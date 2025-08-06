@@ -16,9 +16,7 @@ class Settings(BaseSettings):
 
     ENABLE_LOGGING: bool = True
     LOG_LEVEL: str = 'INFO'
-    
-    GOOGLE_API_KEY: str
-    CSE_ID: str
+
     TAVILY_API_KEY: str
 
     FASTAPI_HOST: str 
