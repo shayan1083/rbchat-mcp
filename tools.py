@@ -12,6 +12,7 @@ import csv
 from datetime import datetime
 import io
 from openai import OpenAI
+import time
 
 client = OpenAI()
 
@@ -34,7 +35,7 @@ def run_sql_query(query: str) -> str:
     Returns:
         A formatted string or JSON of the result rows.
     """
-    logger.log_sql_output(query)
+    start_time = time.perf_counter() 
     if not query.strip().lower().startswith("select"):
         return "Only SELECT queries are allowed."
 
@@ -45,6 +46,9 @@ def run_sql_query(query: str) -> str:
     except Exception as e:
         logger.error(f"(MCP) Error running SQL query: {e}")
         return f"Query failed: {e}"
+    finally:
+        elapsed_time = time.perf_counter() - start_time
+        logger.log_sql_output(f"SQL Query Ran: {query}; Query Execution Time: {elapsed_time}")
 
 
 
@@ -59,13 +63,14 @@ def search_internet(query: str) -> str:
     Returns:
         A string containing the search results.
     """
+    start_time = time.perf_counter() 
     try:
         searchTool="OpenAI Api"
         if settings.OPENAI_API_KEY:
             response = client.responses.create(
                 model="gpt-4.1",
                 tools=[{"type": "web_search_preview"}],
-                input=query
+                input=query,
             )
             res = response.output_text
         elif settings.TAVILY_API_KEY:
@@ -75,10 +80,12 @@ def search_internet(query: str) -> str:
         else:
             logger.error(f"(MCP) No internet search api key available")
             return "Error"
-        logger.info(f"(MCP) {searchTool} searched {query}; Output: {res}")
         return res
     except Exception as e:
         logger.error(f"(MCP) Error using internet_search: {e}")
+    finally: 
+        elapsed_time = time.perf_counter() - start_time
+        logger.info(f"(MCP) {searchTool} searched {query}; Output: {res}; Execution Time: {elapsed_time}")
 
 @mcp.tool()
 def processed_file(file: dict) -> dict:
