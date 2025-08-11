@@ -9,7 +9,7 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_tavily import TavilySearch
 import base64
 import csv
-from datetime import datetime
+from datetime import datetime, date
 import io
 from openai import OpenAI
 import time
@@ -23,6 +23,64 @@ mcp = FastMCP("RBChat")
 
 def get_db_name() -> str:
     return mcp.get_context().request_context.request.headers.get("db_name", settings.DB_NAME)
+
+@mcp.tool()
+def allocate_top_selling_sku(units:int,transaction_date:date) -> str:
+    """
+    This tool is used to allocate top selling sku codes to stores
+    
+    Args:
+    -  units : shipment quantity
+    -  transaction_date : transaction date of sale
+
+    Returns:
+        A formatted string or JSON of the result rows.
+    """
+    query = f"""
+    WITH filtered_data AS (
+    SELECT skucode, store, SUM(quantity_sold) AS total_sold 
+    FROM sales_for_sku
+    WHERE skucode IN (
+        SELECT skucode
+        FROM sales_for_sku
+        WHERE transaction_date = '{transaction_date}'
+        GROUP BY skucode
+        ORDER BY SUM(quantity_sold) DESC limit 10
+            )  
+            GROUP BY skucode, store
+        ),
+        sku_totals AS (
+            SELECT skucode, SUM(total_sold) AS sku_total
+            FROM filtered_data
+            GROUP BY skucode
+        ),
+        allocations AS (
+            SELECT 
+                f.skucode,
+                f.store,
+                f.total_sold,
+                s.sku_total,
+                ROUND((f.total_sold::numeric / NULLIF(s.sku_total,0)) * {units}) AS allocated_units
+            FROM filtered_data f
+            INNER JOIN sku_totals s ON f.skucode = s.skucode
+        )
+        SELECT skucode, store, total_sold, sku_total, allocated_units
+        FROM allocations
+        ORDER BY skucode, allocated_units DESC, store
+        LIMIT 10000
+    """
+    start_time = time.perf_counter() 
+    
+
+    try:
+        return export_user_query_to_file(query)        
+    except Exception as e:
+        logger.error(f"(MCP) Error running SQL query: {e}")
+        return f"Query failed: {e}"
+    finally:
+        elapsed_time = time.perf_counter() - start_time
+        logger.log_sql_output(f"SQL Query Ran: {query}; Query Execution Time: {elapsed_time}")
+
 
 @mcp.tool()
 def run_sql_query(query: str) -> str:
