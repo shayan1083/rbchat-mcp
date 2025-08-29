@@ -4,8 +4,6 @@ from user_repository import UserRepository
 from llm_logger import LLMLogger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_google_community import GoogleSearchAPIWrapper
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_tavily import TavilySearch
 import base64
 import csv
@@ -13,6 +11,8 @@ from datetime import datetime, date
 import io
 from openai import OpenAI
 import time
+from auth import AuthMiddleware
+from starlette.requests import Request
 
 client = OpenAI()
 
@@ -23,6 +23,9 @@ mcp = FastMCP("RBChat")
 
 def get_db_name() -> str:
     return mcp.get_context().request_context.request.headers.get("db_name", settings.DB_NAME)
+
+def get_user() -> str:
+    return mcp.get_context().request_context.request.state.user
 
 @mcp.tool()
 def allocate_top_selling_sku(units:int,transaction_date:date) -> str:
@@ -106,7 +109,8 @@ def run_sql_query(query: str) -> str:
         return f"Query failed: {e}"
     finally:
         elapsed_time = time.perf_counter() - start_time
-        logger.log_sql_output(f"SQL Query Ran: {query}; Query Execution Time: {elapsed_time}")
+        user = get_user()
+        logger.log_sql_output(f"User: {user} SQL Query Ran: {query}; Query Execution Time: {elapsed_time}")
 
 
 
@@ -233,12 +237,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(AuthMiddleware)
+
 @app.get("/api/healthcheck")
 async def health_check():
     return {"status": 200, "message": "MCP server is running"}
 
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run("tools:app", port=7999, reload=True)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("tools:app", port=7999, reload=True)
 
 # uvicorn tools:app --reload --port 7999

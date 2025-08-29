@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     FASTAPI_HOST: str 
     FASTAPI_PORT: int
 
+    SECRET_KEY: str 
+    ALGORITHM: str 
+
     class Config:
         env_file = ".env"
         extra = "allow"
